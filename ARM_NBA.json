@@ -62,7 +62,7 @@
                 "displayName": "PlayerData",
                 "customParameterValues": {},
                 "api": {
-                    "id": "[concat('/subscriptions/df38f39d-4e9d-4ddf-a1a1-994f0b0b7706/providers/Microsoft.Web/locations/northeurope/managedApis/', parameters('connections_azureblob_name'))]"
+                    "id": "[concat('/subscriptions/', subscription().subscriptionId,'/providers/Microsoft.Web/locations/',resourceGroup().location,'/managedApis/', parameters('connections_azureblob_name'))]"
                 }
             }
         },
@@ -75,7 +75,7 @@
                 "displayName": "[concat('elavdesign@', parameters('connections_gmail_name'), '.com')]",
                 "customParameterValues": {},
                 "api": {
-                    "id": "[concat('/subscriptions/df38f39d-4e9d-4ddf-a1a1-994f0b0b7706/providers/Microsoft.Web/locations/northeurope/managedApis/', parameters('connections_gmail_name'))]"
+                    "id": "[concat('/subscriptions/', subscription().subscriptionId,'/providers/Microsoft.Web/locations/',resourceGroup().location,'/managedApis/', parameters('connections_gmail_name'))]"
                 }
             }
         },
@@ -345,12 +345,12 @@
                             "azureblob": {
                                 "connectionId": "[resourceId('Microsoft.Web/connections', parameters('connections_azureblob_name'))]",
                                 "connectionName": "azureblob",
-                                "id": "/subscriptions/df38f39d-4e9d-4ddf-a1a1-994f0b0b7706/providers/Microsoft.Web/locations/northeurope/managedApis/azureblob"
+                                "id": "[concat('/subscriptions/', subscription().subscriptionId,'/providers/Microsoft.Web/locations/',resourceGroup().location,'/managedApis/azureblob')]"
                             },
                             "gmail": {
                                 "connectionId": "[resourceId('Microsoft.Web/connections', parameters('connections_gmail_name'))]",
                                 "connectionName": "gmail",
-                                "id": "/subscriptions/df38f39d-4e9d-4ddf-a1a1-994f0b0b7706/providers/Microsoft.Web/locations/northeurope/managedApis/gmail"
+                                "id": "[concat('/subscriptions/', subscription().subscriptionId,'/providers/Microsoft.Web/locations/',resourceGroup().location,'/managedApis/gmail')]"
                             }
                         }
                     }
