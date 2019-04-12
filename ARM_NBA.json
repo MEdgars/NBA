@@ -1,0 +1,361 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "connections_gmail_name": {
+            "defaultValue": "gmail",
+            "type": "String"
+        },
+        "workflows_NBAlogic_name": {
+            "defaultValue": "NBAlogic",
+            "type": "String"
+        },
+        "connections_azureblob_name": {
+            "defaultValue": "azureblob",
+            "type": "String"
+        },
+        "storageAccounts_nbaplayerstorage_name": {
+            "defaultValue": "nbaplayerstorage",
+            "type": "String"
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Storage/storageAccounts",
+            "apiVersion": "2018-07-01",
+            "name": "[parameters('storageAccounts_nbaplayerstorage_name')]",
+            "location": "northeurope",
+            "sku": {
+                "name": "Standard_RAGRS",
+                "tier": "Standard"
+            },
+            "kind": "BlobStorage",
+            "properties": {
+                "networkAcls": {
+                    "bypass": "AzureServices",
+                    "virtualNetworkRules": [],
+                    "ipRules": [],
+                    "defaultAction": "Allow"
+                },
+                "supportsHttpsTrafficOnly": true,
+                "encryption": {
+                    "services": {
+                        "file": {
+                            "enabled": true
+                        },
+                        "blob": {
+                            "enabled": true
+                        }
+                    },
+                    "keySource": "Microsoft.Storage"
+                },
+                "accessTier": "Hot"
+            }
+        },
+        {
+            "type": "Microsoft.Web/connections",
+            "apiVersion": "2016-06-01",
+            "name": "[parameters('connections_azureblob_name')]",
+            "location": "northeurope",
+            "properties": {
+                "displayName": "PlayerData",
+                "customParameterValues": {},
+                "api": {
+                    "id": "[concat('/subscriptions/df38f39d-4e9d-4ddf-a1a1-994f0b0b7706/providers/Microsoft.Web/locations/northeurope/managedApis/', parameters('connections_azureblob_name'))]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Web/connections",
+            "apiVersion": "2016-06-01",
+            "name": "[parameters('connections_gmail_name')]",
+            "location": "northeurope",
+            "properties": {
+                "displayName": "[concat('elavdesign@', parameters('connections_gmail_name'), '.com')]",
+                "customParameterValues": {},
+                "api": {
+                    "id": "[concat('/subscriptions/df38f39d-4e9d-4ddf-a1a1-994f0b0b7706/providers/Microsoft.Web/locations/northeurope/managedApis/', parameters('connections_gmail_name'))]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "[parameters('workflows_NBAlogic_name')]",
+            "location": "northeurope",
+            "dependsOn": [
+                "[resourceId('Microsoft.Web/connections', parameters('connections_azureblob_name'))]",
+                "[resourceId('Microsoft.Web/connections', parameters('connections_gmail_name'))]"
+            ],
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        }
+                    },
+                    "triggers": {
+                        "Recurrence": {
+                            "recurrence": {
+                                "frequency": "Day",
+                                "interval": 1,
+                                "schedule": {
+                                    "hours": [
+                                        "9"
+                                    ]
+                                },
+                                "timeZone": "FLE Standard Time"
+                            },
+                            "type": "Recurrence"
+                        }
+                    },
+                    "actions": {
+                        "Compose_2": {
+                            "runAfter": {
+                                "For_each": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Compose",
+                            "inputs": "@actionOutputs('Compose')"
+                        },
+                        "Filter_array": {
+                            "runAfter": {
+                                "HTTP": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Query",
+                            "inputs": {
+                                "from": "@body('HTTP')['league']['standard']",
+                                "where": "@equals(item()['yearsPro'], string(0))"
+                            }
+                        },
+                        "For_each": {
+                            "foreach": "@body('Filter_array')",
+                            "actions": {
+                                "Compose": {
+                                    "runAfter": {
+                                        "Parse_JSON": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Compose",
+                                    "inputs": {
+                                        "firstName": "@items('For_each')['firstName']",
+                                        "heightMeters": "@items('For_each')['heightMeters']",
+                                        "lastName": "@items('For_each')['lastName']",
+                                        "plusMinus": "@body('Parse_JSON')?['league']?['standard']?['stats']?['careerSummary']?['plusMinus']"
+                                    }
+                                },
+                                "HTTP_2": {
+                                    "runAfter": {},
+                                    "type": "Http",
+                                    "inputs": {
+                                        "method": "GET",
+                                        "uri": "http://data.nba.net/10s/prod/v1/2018/players/@{string(item()['personID'])}_profile.json"
+                                    }
+                                },
+                                "Parse_JSON": {
+                                    "runAfter": {
+                                        "HTTP_2": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "ParseJson",
+                                    "inputs": {
+                                        "content": "@body('HTTP_2')",
+                                        "schema": {
+                                            "properties": {
+                                                "stats": {
+                                                    "properties": {
+                                                        "careerSummary": {
+                                                            "properties": {
+                                                                "apg": {
+                                                                    "type": "string"
+                                                                },
+                                                                "assists": {
+                                                                    "type": "string"
+                                                                },
+                                                                "blocks": {
+                                                                    "type": "string"
+                                                                },
+                                                                "bpg": {
+                                                                    "type": "string"
+                                                                },
+                                                                "dd2": {
+                                                                    "type": "string"
+                                                                },
+                                                                "defReb": {
+                                                                    "type": "string"
+                                                                },
+                                                                "fga": {
+                                                                    "type": "string"
+                                                                },
+                                                                "fgm": {
+                                                                    "type": "string"
+                                                                },
+                                                                "fgp": {
+                                                                    "type": "string"
+                                                                },
+                                                                "fta": {
+                                                                    "type": "string"
+                                                                },
+                                                                "ftm": {
+                                                                    "type": "string"
+                                                                },
+                                                                "ftp": {
+                                                                    "type": "string"
+                                                                },
+                                                                "gamesPlayed": {
+                                                                    "type": "string"
+                                                                },
+                                                                "gamesStarted": {
+                                                                    "type": "string"
+                                                                },
+                                                                "min": {
+                                                                    "type": "string"
+                                                                },
+                                                                "mpg": {
+                                                                    "type": "string"
+                                                                },
+                                                                "offReb": {
+                                                                    "type": "string"
+                                                                },
+                                                                "pFouls": {
+                                                                    "type": "string"
+                                                                },
+                                                                "plusMinus": {
+                                                                    "type": "string"
+                                                                },
+                                                                "points": {
+                                                                    "type": "string"
+                                                                },
+                                                                "ppg": {
+                                                                    "type": "string"
+                                                                },
+                                                                "rpg": {
+                                                                    "type": "string"
+                                                                },
+                                                                "spg": {
+                                                                    "type": "string"
+                                                                },
+                                                                "steals": {
+                                                                    "type": "string"
+                                                                },
+                                                                "td3": {
+                                                                    "type": "string"
+                                                                },
+                                                                "totReb": {
+                                                                    "type": "string"
+                                                                },
+                                                                "tpa": {
+                                                                    "type": "string"
+                                                                },
+                                                                "tpm": {
+                                                                    "type": "string"
+                                                                },
+                                                                "tpp": {
+                                                                    "type": "string"
+                                                                },
+                                                                "turnovers": {
+                                                                    "type": "string"
+                                                                }
+                                                            },
+                                                            "type": "object"
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "Filter_array": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Foreach"
+                        },
+                        "HTTP": {
+                            "runAfter": {},
+                            "type": "Http",
+                            "inputs": {
+                                "method": "GET",
+                                "uri": "http://data.nba.net/10s/prod/v1/2018/players.json"
+                            }
+                        },
+                        "Send_email": {
+                            "runAfter": {
+                                "Update_blob": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "body": {
+                                    "Body": "Access list of player data here: \nhttps://nbaplayerstorage.blob.core.windows.net/playerdatacontainer/Playerdata.json",
+                                    "Subject": "NBA player list",
+                                    "To": "elavdesign@gmail.com"
+                                },
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['gmail']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "path": "/Mail"
+                            }
+                        },
+                        "Update_blob": {
+                            "runAfter": {
+                                "Compose_2": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "metadata": {
+                                "JTJmcGxheWVyZGF0YWNvbnRhaW5lciUyZlBsYXllcmRhdGEuanNvbg==": "/playerdatacontainer/Playerdata.json"
+                            },
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "body": "@outputs('Compose_2')",
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azureblob']['connectionId']"
+                                    }
+                                },
+                                "method": "put",
+                                "path": "/datasets/default/files/@{encodeURIComponent(encodeURIComponent('JTJmcGxheWVyZGF0YWNvbnRhaW5lciUyZlBsYXllcmRhdGEuanNvbg=='))}"
+                            }
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "azureblob": {
+                                "connectionId": "[resourceId('Microsoft.Web/connections', parameters('connections_azureblob_name'))]",
+                                "connectionName": "azureblob",
+                                "id": "/subscriptions/df38f39d-4e9d-4ddf-a1a1-994f0b0b7706/providers/Microsoft.Web/locations/northeurope/managedApis/azureblob"
+                            },
+                            "gmail": {
+                                "connectionId": "[resourceId('Microsoft.Web/connections', parameters('connections_gmail_name'))]",
+                                "connectionName": "gmail",
+                                "id": "/subscriptions/df38f39d-4e9d-4ddf-a1a1-994f0b0b7706/providers/Microsoft.Web/locations/northeurope/managedApis/gmail"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}
